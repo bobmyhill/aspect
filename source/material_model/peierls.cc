@@ -29,7 +29,7 @@ namespace aspect
 
     template <int dim>
     std::vector<double>
-    Peierls<dim>::
+    peierls<dim>::
     compute_volume_fractions( const std::vector<double> &compositional_fields) const
     {
       std::vector<double> volume_fractions( compositional_fields.size()+1);
@@ -60,6 +60,55 @@ namespace aspect
     }
 
     template <int dim>
+    double
+    peierls<dim>::
+    average_values ( const std::vector<double> &composition,
+		     const std::vector<double> &parameter_values
+		     const std::string &average_type) const
+    {
+      double visc = 0.0;
+      std::vector<double> volume_fractions = compute_volume_fractions(composition);
+
+      switch (average_type)
+        {
+          case arithmetic:
+          {
+            for (unsigned int i=0; i< volume_fractions.size(); ++i)
+              averaged_parameter += volume_fractions[i]*parameter_values[i];
+            break;
+          }
+          case harmonic:
+          {
+            for (unsigned int i=0; i< volume_fractions.size(); ++i)
+              averaged_parameter += volume_fractions[i]/(parameter_values[i]);
+            averaged_parameter = 1.0/averaged_parameter;
+            break;
+          }
+          case geometric:
+          {
+            for (unsigned int i=0; i < volume_fractions.size(); ++i)
+              averaged_parameter += volume_fractions[i]*std::log(parameter_values[i]);
+            averaged_parameter = std::exp(averaged_parameter);
+            break;
+          }
+          case maximum_composition:
+          {
+            const unsigned int i = (unsigned int)(std::max_element( volume_fractions.begin(),
+                                                                    volume_fractions.end() )
+                                                  - volume_fractions.begin());
+            averaged_parameter = parameter_values[i];
+            break;
+          }
+          default:
+          {
+            AssertThrow( false, ExcNotImplemented() );
+            break;
+          }
+        }
+      return averaged_parameter;
+    }
+
+    template <int dim>
     void
     Peierls<dim>::
     evaluate(const MaterialModelInputs &in,
@@ -71,12 +120,15 @@ namespace aspect
         {
           const Point<dim> position = in.position[i];
           const double temperature = in.temperature[i];
-	  const double pressure= in.pressure[i] // NEED TO CHECK THIS
+	  const double pressure= in.pressure[i]
           const std::vector<double> composition = in.composition[i];
           const std::vector<double> volume_fractions = compute_volume_fractions(composition);
           const SymmetricTensor<2,dim> strain_rate = in.strain_rate[i];
 	  const viscosity = in.viscosities[i]; // Try using viscosity from the previous time step to compute stresses for this time step
-	  
+
+
+	  // Averaging composition-field dependent properties
+
 	  // densities
           double density = 0.0;
           for (unsigned int j=0; j < volume_fractions.size(); ++j)
@@ -92,52 +144,41 @@ namespace aspect
           for (unsigned int j=0; j < volume_fractions.size(); ++j)
             thermal_expansivity += volume_fractions[j] * thermal_expansivities[j];
 
-
-	  // prefactors_diffusion
-          // activation_energies_diffusion
-          // activation_volumes_diffusion
-          // prefactors_dislocation
-          // activation_energies_dislocation
-          // activation_volumes_dislocation
-          // stress_exponents_dislocation
-          // prefactors_Peierls
-          // activation_energies_Peierls
-          // activation_volumes_Peierls
-          // stress_exponents_Peierls
-	  // reference_stresses_Peierls
-	  // p_exponents_Peierls
-	  // q_exponents_Peierls
-
-
-
-
-
-
-	  
+	  // Viscosities
           const double e2inv = std::sqrt(std::pow(second_invariant(strain_rate),2) + std::pow(min_strain_rate,2)); // include minimum strain rate
 	  const double sigma2inv = viscosity/e2inv; // second invariant of the stress
-	  const double non_dimensional_peierls_stress = std::pow(sigma2inv/reference_peierls_stress, peierls_exponent_p); 
-	  const double peierls_factor = std::pow(1.0-non_dimensional_peierls_stress, peierls_exponent_q);
+
+	  // ---- Find effective viscosities for each of the individual phases
+	  const std::vector<double> composition_viscosities;
+	  for (unsigned int j=0; j < volume_fractions.size(); ++j)
+	    {
+	      const double non_dimensional_peierls_stress = std::pow(sigma2inv/reference_stresses_peierls[j], p_exponents_peierls[j]);
+	      const double peierls_factor = std::pow(1.0-non_dimensional_peierls_stress, q_exponents_peierls[j]);
 	  
 	  
-	  // Find the individual components of the viscosities
-	  const double viscosity_diffusion = std::min(1e22,(1e0/prefactor_diffusion)*
-						      std::exp((activation_energy_diffusion+activation_volume_diffusion*pressure)/(R*temperature)));
+	      // Find the individual components of the viscosities
+	      const double viscosity_diffusion = std::min(1e22,(1e0/prefactors_diffusion[j])*
+		std::exp((activation_energies_diffusion[j]+activation_volumes_diffusion[j]*pressure)/(R*temperature)));
 	  
-	  const double viscosity_dislocation = std::min(1e22,std::pow(prefactor_dislocation,-1e0/stress_exponent_dislocation)*
-							std::pow(e2inv,(1e0-stress_exponent_dislocation)/
-								 stress_exponent_dislocation)*
-							std::exp((activation_energy_dislocation+
-								  activation_volume_dislocation*pressure)/(stress_exponent_dislocation*R*temperature)));
+	      const double viscosity_dislocation = std::min(1e22,std::pow(prefactors_dislocation[j],-1e0/stress_exponents_dislocation[j])*
+		std::pow(e2inv,(1e0-stress_exponents_dislocation[j])/
+		stress_exponents_dislocation[j])*
+		std::exp((activation_energies_dislocation[j]+
+		activation_volumes_dislocation[j]*pressure)/(stress_exponents_dislocation[j]*R*temperature)));
 	  
-	  const double viscosity_peierls = std::min(1e22,(1e0/prefactor_peierls)*
-						    std::pow(sigma2inv, 1e0-stress_exponent_peierls)*
-						    std::exp(peierls_factor*(activation_energy_peierls+activation_volume_peierls*pressure)/(R*temperature)));
+	      const double viscosity_peierls = std::min(1e22,(1e0/prefactors_peierls[j])*
+		std::pow(sigma2inv, 1e0-stress_exponents_peierls[j])*
+		std::exp(peierls_factor*(activation_energies_peierls[j]+activation_volumes_peierls[j]*pressure)/(R*temperature)));
 
 											  
-          // Effective viscosity = harmonic mean of diffusion, dislocation and Peierls creep. Range is limited to 1e17-1e28 for stability.
-          const double veff = std::min(std::max(std::pow((1.0/viscosity_diffusion + 1.0/viscosity_dislocation + 1.0/viscosity_peierls), -1.0), min_visc), max_visc);
+	      // Effective viscosity = harmonic mean of diffusion, dislocation and Peierls creep. Range is limited to 1e17-1e28 for stability.
+	      composition_viscosities[j] = std::min(std::max(std::pow((1.0/viscosity_diffusion + 1.0/viscosity_dislocation + 1.0/viscosity_peierls), -1.0), min_visc), max_visc);
+	    }
 
+	  // ---- Conduct averaging of the phase viscosities
+	  veff=(composition, composition_viscosities, viscosity_averaging);
+	      
+	  // Output variables
           out.viscosities[i] = veff;
           out.densities[i] = density;
           out.thermal_expansion_coefficients[i] = thermal_expansivity;
@@ -280,6 +321,12 @@ namespace aspect
                              "If only one values is given, then all use the same value.  Units: $1 / K$");
 
 	  // Rheological parameters
+	  prm.declare_entry ("Viscosity averaging scheme", "Harmonic",
+                            Patterns::Selection("arithmetic|harmonic|geometric|maximum composition"),
+                            "When more than one compositional field is present at a point "
+                            "with different viscosities, we need to come up with an average "
+                            "viscosity at that point.  Select a weighted harmonic, arithmetic, "
+                            "geometric, or maximum composition.");
 	  // Diffusion creep parameters
 	  prm.declare_entry ("Prefactors for diffusion creep", "1.92e-11",
                              Patterns::List(Patterns::Double(0)),
@@ -403,10 +450,20 @@ namespace aspect
           else
             thermal_expansivities = x_values;
 
-
-	  // Rheological parameters
-	  // Diffusion creep parameters
 	  
+	  // Rheological parameters
+	  if (prm.get ("Viscosity averaging scheme") == "harmonic")
+            viscosity_averaging = harmonic;
+          else if (prm.get ("Viscosity averaging scheme") == "arithmetic")
+            viscosity_averaging = arithmetic;
+          else if (prm.get ("Viscosity averaging scheme") == "geometric")
+            viscosity_averaging = geometric;
+          else if (prm.get ("Viscosity averaging scheme") == "maximum composition")
+            viscosity_averaging = maximum_composition;
+          else
+            AssertThrow(false, ExcMessage("Not a valid viscosity averaging scheme"));
+		    
+	  // Diffusion creep parameters
           // ---- diffusion creep prefactors
           x_values = Utilities::string_to_double(Utilities::split_string_list(prm.get ("Prefactors for diffusion creep")));
           AssertThrow(x_values.size() == 1u || (x_values.size() == n_fields),
@@ -444,7 +501,7 @@ namespace aspect
             prefactors_dislocation.assign( n_fields , x_values[0] );
           else
             prefactors_dislocation = x_values;
-
+	  
 	  // ---- dislocation creep activation energies
           x_values = Utilities::string_to_double(Utilities::split_string_list(prm.get ("Activation energies for dislocation creep")));
           AssertThrow(x_values.size() == 1u || (x_values.size() == n_fields),
