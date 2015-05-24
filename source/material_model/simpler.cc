@@ -28,48 +28,30 @@ namespace aspect
 {
   namespace MaterialModel
   {
-    template <int dim>
-    bool
-    Simpler<dim>::
-    viscosity_depends_on (const NonlinearDependence::Dependence) const
+
+    namespace dependencies
     {
-      return false;
+      bool viscosity = false;
+      bool density = false;
+      bool compressibility = false;
+      bool specific_heat = false;
+      bool thermal_conductivity = false;
+    }
+    
+    namespace reference_values
+    {
+      double viscosity = eta;
+      double density = reference_rho;      
     }
 
+    // OR
 
     template <int dim>
-    bool
-    Simpler<dim>::
-    density_depends_on (const NonlinearDependence::Dependence) const
+    struct dependencies
     {
-      return false;
+      
     }
-
-    template <int dim>
-    bool
-    Simpler<dim>::
-    compressibility_depends_on (const NonlinearDependence::Dependence) const
-    {
-      return false;
-    }
-
-    template <int dim>
-    bool
-    Simpler<dim>::
-    specific_heat_depends_on (const NonlinearDependence::Dependence) const
-    {
-      return false;
-    }
-
-    template <int dim>
-    bool
-    Simpler<dim>::
-    thermal_conductivity_depends_on (const NonlinearDependence::Dependence) const
-    {
-      return false;
-    }
-
-
+      
     template <int dim>
     bool
     Simpler<dim>::
@@ -78,21 +60,6 @@ namespace aspect
       return false;
     }
 
-    template <int dim>
-    double
-    Simpler<dim>::
-    reference_viscosity () const
-    {
-      return eta;
-    }
-
-    template <int dim>
-    double
-    Simpler<dim>::
-    reference_density () const
-    {
-      return reference_rho;
-    }
 
     template <int dim>
     void
