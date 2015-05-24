@@ -28,29 +28,6 @@ namespace aspect
 {
   namespace MaterialModel
   {
-
-    namespace dependencies
-    {
-      bool viscosity = false;
-      bool density = false;
-      bool compressibility = false;
-      bool specific_heat = false;
-      bool thermal_conductivity = false;
-    }
-    
-    namespace reference_values
-    {
-      double viscosity = eta;
-      double density = reference_rho;      
-    }
-
-    // OR
-
-    template <int dim>
-    struct dependencies
-    {
-      
-    }
       
     template <int dim>
     bool
@@ -127,12 +104,12 @@ namespace aspect
       {
         prm.enter_subsection("Simpler model");
         {
-          reference_rho              = prm.get_double ("Reference density");
-          reference_T                = prm.get_double ("Reference temperature");
-          eta                        = prm.get_double ("Viscosity");
-          k_value                    = prm.get_double ("Thermal conductivity");
-          reference_specific_heat    = prm.get_double ("Reference specific heat");
-          thermal_alpha              = prm.get_double ("Thermal expansion coefficient");
+          reference_values.density     = prm.get_double ("Reference density");
+          reference_values.temperature = prm.get_double ("Reference temperature");
+          reference_values.viscosity   = prm.get_double ("Viscosity");
+          reference_values.thermal_conductivity = prm.get_double ("Thermal conductivity");
+          reference_values.specific_heat        = prm.get_double ("Reference specific heat");
+          reference_values.thermal_expansivity  = prm.get_double ("Thermal expansion coefficient");
         }
         prm.leave_subsection();
       }

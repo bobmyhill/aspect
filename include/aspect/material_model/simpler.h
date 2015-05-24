@@ -41,30 +41,11 @@ namespace aspect
      * @ingroup MaterialModels
      */
     template <int dim>
-    class Simpler : public Interface<dim>
+    class Simpler : public TerseInterface<dim>
     {
       public:
 
-        virtual bool
-        viscosity_depends_on (const NonlinearDependence::Dependence dependence) const;
-
-        virtual bool
-        density_depends_on (const NonlinearDependence::Dependence dependence) const;
-
-        virtual bool
-        compressibility_depends_on (const NonlinearDependence::Dependence dependence) const;
-
-        virtual bool
-        specific_heat_depends_on (const NonlinearDependence::Dependence dependence) const;
-
-        virtual bool
-        thermal_conductivity_depends_on (const NonlinearDependence::Dependence dependence) const;
-
         virtual bool is_compressible () const;
-
-        virtual double reference_viscosity () const;
-
-        virtual double reference_density () const;
 
         virtual void evaluate(const MaterialModel::MaterialModelInputs<dim> &in,
                               MaterialModel::MaterialModelOutputs &out) const;
@@ -91,15 +72,28 @@ namespace aspect
          * @}
          */
 
-      private:
-        double reference_rho;
-        double reference_T;
-        double eta;
-        double thermal_alpha;
-        double reference_specific_heat;
-        double k_value;
+	/**
+	 * Structure describing which properties depend on 
+	 */
+	struct nonlinear_dependants
+	{
+	  bool viscosity = false;
+	  bool density = false;
+	  bool compressibility = false;
+	  bool specific_heat = false;
+	  bool thermal_conductivity = false;
+	};
+	
+	struct reference_values
+	{
+	  double temperature;
+	  double viscosity;
+	  double density;
+	  double thermal_expansivity;
+	  double specific_heat;
+	  double thermal_conductivity;
+	};
     };
-
   }
 }
 
