@@ -117,8 +117,23 @@ namespace aspect
     ASPECT_REGISTER_BOUNDARY_TEMPERATURE_MODEL(AsciiData,
                                                "ascii data",
                                                "Implementation of a model in which the boundary "
-                                               "data is derived from files containing data "
-                                               "in ascii format. Note the required format of the "
+                                               "temperature is derived from a file containing data "
+                                               "in ascii format. "
+					       "ASPECT ignores the first lines if they begin with '#', "
+					       "except for a required line starting '# POINTS:', "
+					       " which contains the number of grid points in each dimension, "
+					       " e.g.. '# POINTS: 3 3'. "
+					       "ASPECT then reads one datum per line, in two/three column format: "
+					       "'x', '(y)', 'Temperature [K]' for Cartesian data, and "
+					       "'r', '(phi)' [longitude], '(theta)' [pi/2-latitude], 'Temperature [K]' "
+					       "for spherical data. Angular data ('phi' and 'theta') should be "
+					       "supplied in radians. The 'x' variable is in the innermost loop, "
+					       "followed by 'y' (and 'z'). In other words, the first two data lines "
+					       "will be x[0] y[0] (z[0]) T[0,0,0] and x[1] y[0] (z[0]) T[1,0,0].")
+  }
+}
+
+Note the required format of the "
                                                "input data: The first lines may contain any number of comments"
                                                "if they begin with '#', but one of these lines needs to"
                                                "contain the number of grid points in each dimension as"
