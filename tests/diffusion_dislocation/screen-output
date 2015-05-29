@@ -6,15 +6,34 @@
 --     . using Trilinos
 -----------------------------------------------------------------------------
 
-Number of active cells: 1,024 (on 6 levels)
-Number of degrees of freedom: 22,214 (8,450+1,089+4,225+4,225+4,225)
+Number of active cells: 64 (on 4 levels)
+Number of degrees of freedom: 1,237 (578+81+289+289)
 
 *** Timestep 0:  t=0 years
    Solving temperature system... 0 iterations.
-   Solving upper_crust system ... 0 iterations.
-   Solving lower_crust system ... 0 iterations.
+   Solving depleted_lithosphere system ... 0 iterations.
    Rebuilding Stokes preconditioner...
-   Solving Stokes system... 30+4 iterations.
+   Solving Stokes system... 30+32 iterations.
+      Nonlinear residuals: 239213, 4.53828e-06, 1.61827e+14
+      Total relative nonlinear residual: 1
+
+
+   Solving temperature system... 0 iterations.
+   Solving depleted_lithosphere system ... 0 iterations.
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 9 iterations.
+      Nonlinear residuals: 239213, 4.53828e-06, 1.18652e+11
+      Total relative nonlinear residual: 0.0007332
+
+
+   Solving temperature system... 0 iterations.
+   Solving depleted_lithosphere system ... 0 iterations.
+   Rebuilding Stokes preconditioner...
+   Solving Stokes system... 6 iterations.
+      Nonlinear residuals: 239213, 4.53828e-06, 1.94849e+07
+      Total relative nonlinear residual: 1.20406e-07
+
+
 
    Postprocessing:
 
@@ -22,21 +41,21 @@ Termination requested by criterion: end step
 
 
 +---------------------------------------------+------------+------------+
-| Total wallclock time elapsed since start    |      1.09s |            |
+| Total wallclock time elapsed since start    |     0.422s |            |
 |                                             |            |            |
 | Section                         | no. calls |  wall time | % of total |
 +---------------------------------+-----------+------------+------------+
-| Assemble Stokes system          |         1 |     0.222s |        20% |
-| Assemble composition system     |         2 |    0.0913s |       8.4% |
-| Assemble temperature system     |         1 |    0.0651s |         6% |
-| Build Stokes preconditioner     |         1 |     0.243s |        22% |
-| Build composition preconditioner|         2 |   0.00837s |      0.77% |
-| Build temperature preconditioner|         1 |   0.00458s |      0.42% |
-| Solve Stokes system             |         1 |     0.164s |        15% |
-| Solve composition system        |         2 |   0.00604s |      0.56% |
-| Solve temperature system        |         1 |   0.00307s |      0.28% |
-| Initialization                  |         2 |     0.106s |       9.7% |
-| Postprocessing                  |         1 |  0.000301s |     0.028% |
-| Setup dof systems               |         1 |     0.115s |        11% |
+| Assemble Stokes system          |         3 |    0.0487s |        12% |
+| Assemble composition system     |         3 |    0.0482s |        11% |
+| Assemble temperature system     |         3 |    0.0466s |        11% |
+| Build Stokes preconditioner     |         3 |    0.0811s |        19% |
+| Build composition preconditioner|         3 |   0.00184s |      0.44% |
+| Build temperature preconditioner|         3 |   0.00175s |      0.41% |
+| Solve Stokes system             |         3 |     0.099s |        23% |
+| Solve composition system        |         3 |   0.00773s |       1.8% |
+| Solve temperature system        |         3 |   0.00454s |       1.1% |
+| Initialization                  |         2 |    0.0435s |        10% |
+| Postprocessing                  |         1 |  0.000122s |     0.029% |
+| Setup dof systems               |         1 |    0.0263s |       6.2% |
 +---------------------------------+-----------+------------+------------+
 

@@ -1120,7 +1120,10 @@ namespace aspect
           for (unsigned int q=0; q<output.size(); ++q)
             {
               Tensor<1,dim> g = gravity_->gravity_vector(in.position[q]);
-              output[q] = std::fabs(std::min(0.0, g*velocity_values[q]/g.norm()))*year_in_seconds;
+              if (g.norm() < 2.0*std::numeric_limits<double>::min())
+                output[q] = 0.0;
+              else
+                output[q] = std::fabs(std::min(0.0, g*velocity_values[q]/g.norm()))*year_in_seconds;
             }
         }
 
