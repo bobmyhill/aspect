@@ -240,6 +240,37 @@ namespace aspect
 
     template <int dim>
     double
+    Chunk<dim>::start_latitude () const
+    {
+      if (dim == 3)
+	return point1[2];
+      else
+	return 0;
+    }
+
+
+    template <int dim>
+    double
+    Chunk<dim>::end_latitude () const
+    {
+      if (dim == 3)
+	return point2[2];
+      else
+	return 0;
+    }
+
+    template <int dim>
+    double
+    Chunk<dim>::latitude_range () const
+    {
+      if (dim == 3)
+	return point2[2] - point1[2];
+      else
+	return 0;
+    }
+
+    template <int dim>
+    double
     Chunk<dim>::maximal_depth() const
     {
       return point2[0]-point1[0];

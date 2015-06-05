@@ -117,6 +117,15 @@ namespace aspect
         virtual
         double longitude_range() const;
 
+	virtual
+        double start_latitude() const;
+
+        virtual
+        double end_latitude() const;
+
+        virtual
+        double latitude_range() const;
+
         virtual
         double maximal_depth() const;
 
