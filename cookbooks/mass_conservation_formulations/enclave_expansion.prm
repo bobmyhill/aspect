@@ -1,0 +1,123 @@
+# This parameter file tests the effect of uniform heating on a
+# domain which has uniform material properties apart from
+# thermal expansivity, which is nonzero only within a central circle.
+#
+# In incompressible models, div(u)=0, and therefore the strain rate
+# should be exactly zero.
+# In compressible models, div(rho.u)=0, and since only the density inside
+# the circle is changing, an overpressure should be generated.
+# In the case of infinite viscosity and zero thermal conductivity,
+# the pressure should follow an isochore.
+#
+# This test is inspired by Vrijmoed et al. (2009)
+# (dx.doi.org/10.1127/0935-1221/2009/0021-1985)
+
+set Adiabatic surface temperature          = 1000               # default: 0
+set CFL number                             = 1.0
+set Dimension                              = 2
+set End time                               = 2500.0
+set Pressure normalization                 = surface
+set Surface pressure                       = 0
+set Resume computation                     = false
+set Start time                             = 0
+set Use years in output instead of seconds = true
+
+# Possible mass conservation formulations:
+# incompressible|isothermal compression|hydrostatic compression|
+# reference density profile|implicit reference density profile|
+# ask material model
+
+subsection Formulation
+  set Formulation = custom
+  set Mass conservation        = hydrostatic compression
+end
+
+# No gravity, temperature initially 1000 K, heated at a uniform rate 
+subsection Gravity model
+  set Model name = vertical
+  subsection Vertical
+    set Magnitude = 0.0
+  end
+end
+
+subsection Initial temperature model
+  set Model name = function
+  subsection Function 
+    set Function expression =  1000
+  end
+end
+
+subsection Heating model
+  set List of model names = constant heating
+  subsection Constant heating
+    set Radiogenic heating rate = 1e-6
+  end
+end
+
+# Composition 1 within a 25 km radius body in the middle of the 100 km wide/deep
+# domain. Composition 0 elsewhere.
+
+subsection Geometry model
+  set Model name = box
+  subsection Box
+    set X extent = 100e3
+    set Y extent = 100e3
+    set X repetitions = 4
+    set Y repetitions = 4
+  end
+end
+
+subsection Compositional fields
+  set Number of fields = 1
+end
+
+subsection Initial composition model
+  set Model name = function
+  subsection Function
+    set Variable names      = x,y
+    set Function expression = if( sqrt( (x-50e3)^2 + (y-50e3)^2 ) < 25e3 , 1,0)
+  end
+end
+
+
+# This material model for the incompressible case only
+
+#subsection Material model
+#  set Model name = multicomponent
+#  subsection Multicomponent
+#    set Reference temperature = 1000.
+#    set Thermal expansivities = 0e-5, 4e-5
+#  end
+#end
+
+# This material model for the compressible case
+
+subsection Material model
+  set Model name = multicomponent compressible
+  subsection Multicomponent compressible
+    set Reference temperatures = 1000., 1000.
+    set Reference thermal expansivities = 0e-5, 4e-5
+  end
+end
+
+
+subsection Mesh refinement
+  set Additional refinement times        =
+  set Initial adaptive refinement        = 1
+  set Initial global refinement          = 5
+  set Refinement fraction                = 0.3
+  set Coarsening fraction                = 0.05
+  set Strategy                           = composition
+  set Time steps between mesh refinement = 5
+end
+
+
+subsection Postprocess
+  set List of postprocessors = visualization
+  subsection Visualization
+    set List of output variables = material properties, nonadiabatic temperature, stress, strain rate
+    set Number of grouped files       = 1
+    set Output format                 = vtu
+    set Time between graphical output = 0.1
+  end
+end
