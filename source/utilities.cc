@@ -56,6 +56,9 @@
 
 #include <boost/math/special_functions/spherical_harmonic.hpp>
 #include <boost/lexical_cast.hpp>
+#include <boost/iostreams/filtering_streambuf.hpp>
+#include <boost/iostreams/copy.hpp>
+#include <boost/iostreams/filter/bzip2.hpp>
 
 namespace aspect
 {
@@ -955,6 +958,16 @@ namespace aspect
     }
 
 
+    bool
+    filename_is_bzip2(const std::string &filename)
+    {
+      if (filename.find(".bz2") == 0 || filename.find(".bzip2") == 0)
+        return true;
+      else
+        return false;
+    }
+
+
     std::string
     read_and_distribute_file_content(const std::string &filename,
                                      const MPI_Comm &comm)
@@ -1072,6 +1085,45 @@ namespace aspect
                                      "(run cmake with -DASPECT_WITH_LIBDAP=ON)"));
 
 #endif // ASPECT_WITH_LIBDAP
+            }
+          else if (filename_is_bzip2(filename))
+            {
+              std::ifstream filestream(filename.c_str(), filestream.in | filestream.binary);
+
+              if (!filestream)
+                {
+                  // broadcast failure state, then throw
+                  const int ierr = MPI_Bcast(&filesize,1,MPI_UNSIGNED,0,comm);
+                  AssertThrowMPI(ierr);
+                  AssertThrow (false,
+                               ExcMessage (std::string("Could not open file <") + filename + ">."));
+                  return data_string; // never reached
+                }
+
+              // Read data from disk
+              std::stringstream datastream;
+
+              boost::iostreams::filtering_istream in;
+              in.push(boost::iostreams::bzip2_decompressor());
+              in.push(filestream);
+              //boost::iostreams::copy(in, datastream);
+
+              in >> datastream.rdbuf();
+
+              if (!filestream.eof())
+                {
+                  // broadcast failure state, then throw
+                  const int ierr = MPI_Bcast(&filesize,1,MPI_UNSIGNED,0,comm);
+                  AssertThrowMPI(ierr);
+                  AssertThrow (false,
+                               ExcMessage (std::string("Reading of file ") + filename + " finished " +
+                                           "before the end of file was reached. Is the file corrupted or"
+                                           "too large for the input buffer?"));
+                  return data_string; // never reached
+                }
+
+              data_string = datastream.str();
+              filesize = data_string.size();
             }
           else
             {
