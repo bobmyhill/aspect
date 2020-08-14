@@ -40,7 +40,7 @@ namespace aspect
     Simpler<dim>::
     reference_viscosity () const
     {
-      return constant_rheology.compute_viscosity();
+      return constant_rheology.compute_viscosity(0);
     }
 
     template <int dim>
@@ -56,7 +56,7 @@ namespace aspect
         {
           equation_of_state.evaluate(in, i, eos_outputs);
 
-          out.viscosities[i] = constant_rheology.compute_viscosity();
+          out.viscosities[i] = constant_rheology.compute_viscosity(0);
           out.densities[i] = eos_outputs.densities[0];
           out.thermal_expansion_coefficients[i] = eos_outputs.thermal_expansion_coefficients[0];
           out.specific_heat[i] = eos_outputs.specific_heat_capacities[0];
@@ -88,7 +88,7 @@ namespace aspect
                              Patterns::Double (0.),
                              "The value of the thermal conductivity $k$. "
                              "Units: \\si{\\watt\\per\\meter\\per\\kelvin}.");
-          Rheology::ConstantViscosity::declare_parameters(prm,5e24);
+          Rheology::ConstantViscosity<dim>::declare_parameters(prm);
         }
         prm.leave_subsection();
       }

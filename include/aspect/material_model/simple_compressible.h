@@ -137,7 +137,7 @@ namespace aspect
         /**
          * The constant rheology model.
          */
-        Rheology::ConstantViscosity constant_rheology;
+        Rheology::ConstantViscosity<dim> constant_rheology;
     };
 
   }

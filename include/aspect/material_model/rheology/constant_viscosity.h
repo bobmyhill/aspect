@@ -22,6 +22,9 @@
 #define _aspect_material_model_rheology_constant_viscosity_h
 
 #include <aspect/global.h>
+#include <aspect/material_model/interface.h>
+#include <aspect/material_model/utilities.h>
+#include <aspect/simulator_access.h>
 
 namespace aspect
 {
@@ -31,11 +34,12 @@ namespace aspect
 
     namespace Rheology
     {
-      class ConstantViscosity
+      template <int dim>
+      class ConstantViscosity : public ::aspect::SimulatorAccess<dim>
       {
         public:
           /**
-           * Constructor. Initializes viscosity to NaN.
+           * Constructor.
            */
           ConstantViscosity();
 
@@ -44,20 +48,30 @@ namespace aspect
            */
           static
           void
-          declare_parameters (ParameterHandler &prm,
-                              const double default_viscosity = 1e21);
+          declare_parameters (ParameterHandler &prm);
 
           /**
            * Read the parameters from the parameter file.
            */
           void
-          parse_parameters (ParameterHandler &prm);
+          parse_parameters (ParameterHandler &prm,
+                            const std::shared_ptr<std::vector<unsigned int>> &expected_n_phases_per_composition =
+                              std::shared_ptr<std::vector<unsigned int>>());
 
           /**
-           * Compute the viscosity, in this case just a constant.
+           * Compute the viscosity, in this case just a constant
+           * for each composition.
            */
           double
-          compute_viscosity () const;
+          compute_viscosity (const unsigned int composition) const;
+
+          /**
+            * Compute the strain rate and first stress derivative
+            * as a function of stress.
+            */
+          std::pair<double, double>
+          compute_strain_rate_and_derivative (const double stress,
+                                              const unsigned int composition) const;
 
         private:
           /**
@@ -65,7 +79,7 @@ namespace aspect
            * is read from the input file by the parse_parameters()
            * function.
            */
-          double viscosity;
+          std::vector<double> viscosities;
       };
     }
   }

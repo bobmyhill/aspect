@@ -20,6 +20,8 @@
 
 
 #include <aspect/material_model/rheology/constant_viscosity.h>
+#include <aspect/material_model/utilities.h>
+#include <aspect/utilities.h>
 
 #include <deal.II/base/signaling_nan.h>
 #include <deal.II/base/parameter_handler.h>
@@ -31,37 +33,79 @@ namespace aspect
   {
     namespace Rheology
     {
-      ConstantViscosity::ConstantViscosity ()
-        :
-        viscosity(numbers::signaling_nan<double>())
+      template <int dim>
+      ConstantViscosity<dim>::ConstantViscosity ()
       {}
 
 
-
+      template <int dim>
       double
-      ConstantViscosity::compute_viscosity () const
+      ConstantViscosity<dim>::compute_viscosity (const unsigned int composition) const
       {
-        return viscosity;
+        return viscosities[composition];
       }
 
 
 
-      void
-      ConstantViscosity::declare_parameters (ParameterHandler &prm,
-                                             const double default_viscosity)
+      template <int dim>
+      std::pair<double, double>
+      ConstantViscosity<dim>::compute_strain_rate_and_derivative (const double stress,
+                                                                  const unsigned int composition) const
       {
-        prm.declare_entry ("Viscosity", std::to_string(default_viscosity),
-                           Patterns::Double (0.),
-                           "The value of the viscosity $\\eta$. Units: \\si{\\pascal\\second}.");
+        return std::make_pair(0.5*stress/viscosities[composition], 0.5/viscosities[composition]);
       }
 
 
 
+      template <int dim>
       void
-      ConstantViscosity::parse_parameters (ParameterHandler &prm)
+      ConstantViscosity<dim>::declare_parameters (ParameterHandler &prm)
       {
-        viscosity = prm.get_double ("Viscosity");
+        prm.declare_entry ("Viscosity", "5e24",
+                           Patterns::Anything(),
+                           "The value of the viscosity $\\eta$, for background material and compositional fields, "
+                           "for a total of N+1 values, where N is the number of compositional fields. "
+                           "If only one value is given, then all use the same value. "
+                           "Units: \\si{\\pascal\\second}.");
+      }
+
+
+
+      template <int dim>
+      void
+      ConstantViscosity<dim>::parse_parameters (ParameterHandler &prm,
+                                                const std::shared_ptr<std::vector<unsigned int>> &expected_n_phases_per_composition)
+      {
+        // Retrieve the list of composition names
+        const std::vector<std::string> list_of_composition_names = this->introspection().get_composition_names();
+
+        // Establish that a background field is required here
+        const bool has_background_field = true;
+
+        viscosities = Utilities::parse_map_to_double_array(prm.get("Viscosity"),
+                                                           list_of_composition_names,
+                                                           has_background_field,
+                                                           "Viscosity",
+                                                           true,
+                                                           expected_n_phases_per_composition);
       }
     }
+  }
+}
+
+// explicit instantiations
+namespace aspect
+{
+  namespace MaterialModel
+  {
+#define INSTANTIATE(dim) \
+  namespace Rheology \
+  { \
+    template class ConstantViscosity<dim>; \
+  }
+
+    ASPECT_INSTANTIATE(INSTANTIATE)
+
+#undef INSTANTIATE
   }
 }

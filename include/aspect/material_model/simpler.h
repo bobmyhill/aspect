@@ -79,7 +79,7 @@ namespace aspect
         double reference_T;
         double k_value;
 
-        Rheology::ConstantViscosity constant_rheology;
+        Rheology::ConstantViscosity<dim> constant_rheology;
         EquationOfState::LinearizedIncompressible<dim> equation_of_state;
     };
 

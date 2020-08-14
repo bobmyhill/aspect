@@ -38,7 +38,7 @@ namespace aspect
           const double temperature = in.temperature[i];
           const double pressure = in.pressure[i];
 
-          out.viscosities[i] = constant_rheology.compute_viscosity();
+          out.viscosities[i] = constant_rheology.compute_viscosity(0);
           out.specific_heat[i] = reference_specific_heat;
           out.thermal_conductivities[i] = k_value;
           out.thermal_expansion_coefficients[i] = thermal_alpha;
@@ -63,7 +63,7 @@ namespace aspect
     SimpleCompressible<dim>::
     reference_viscosity () const
     {
-      return constant_rheology.compute_viscosity();
+      return constant_rheology.compute_viscosity(0);
     }
 
 
@@ -107,7 +107,7 @@ namespace aspect
                              "The value of the reference compressibility. "
                              "Units: \\si{\\per\\pascal}.");
 
-          Rheology::ConstantViscosity::declare_parameters(prm);
+          Rheology::ConstantViscosity<dim>::declare_parameters(prm);
         }
         prm.leave_subsection();
       }
