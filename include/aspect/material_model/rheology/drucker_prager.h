@@ -99,6 +99,16 @@ namespace aspect
                              const double max_yield_stress) const;
 
           /**
+           * Compute the strain rate and first stress derivative
+           * as a function of stress based on the damped Drucker-Prager flow law.
+           */
+          std::pair<double, double>
+          compute_strain_rate_and_derivative (const double stress,
+                                              const double pressure,
+                                              const unsigned int composition,
+                                              const DruckerPragerParameters p) const;
+
+          /**
            * Compute the derivative of the plastic viscosity with respect to pressure.
            */
           double
