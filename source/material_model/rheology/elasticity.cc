@@ -97,8 +97,8 @@ namespace aspect
                            "Whether to apply a stress averaging scheme to account for differences "
                            "between the fixed elastic time step and numerical time step. ");
         prm.declare_entry ("Elastic damper viscosity", "0.0", Patterns::Double(0),
-                           "Viscous damper that acts in parallel with the elastic viscosity "
-                           "to stabilize behavior. Units: \\si{\\pascal\\second}");
+                           "Viscosity of a viscous damper that acts in parallel with the elastic "
+                           "element to stabilize behavior. Units: \\si{\\pascal\\second}");
       }
 
 
