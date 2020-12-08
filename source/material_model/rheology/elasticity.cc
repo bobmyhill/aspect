@@ -98,7 +98,7 @@ namespace aspect
                            "between the fixed elastic time step and numerical time step. ");
         prm.declare_entry ("Elastic damper viscosity", "0.0", Patterns::Double(0),
                            "Viscous damper that acts in parallel with the elastic viscosity "
-                           "to stabilise behavior. Units: \\si{\\pascal\\second}");
+                           "to stabilize behavior. Units: \\si{\\pascal\\second}");
       }
 
 
