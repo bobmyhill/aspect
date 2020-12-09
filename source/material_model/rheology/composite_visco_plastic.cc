@@ -81,8 +81,20 @@ namespace aspect
         double viscosity = 0.;
         partial_strain_rates.resize(5, 0.);
 
-        // Isostrain averaging
-        if (viscosity_averaging_scheme == isostrain)
+        // Isostress averaging or the first step toward VRH averaging
+        if (viscosity_averaging_scheme == isostress || viscosity_averaging_scheme == voigt_reuss_hill)
+          {
+            viscosity += compute_isostress_viscosity (pressure,
+                                                      temperature,
+                                                      volume_fractions,
+                                                      strain_rate,
+                                                      partial_strain_rates,
+                                                      phase_function_values,
+                                                      n_phases_per_composition);
+          }
+
+        // Isostrain averaging or the second step toward VRH averaging
+        if (viscosity_averaging_scheme == isostrain || viscosity_averaging_scheme == voigt_reuss_hill)
           {
             for (unsigned int i=0; i < number_of_compositions; ++i)
               {
@@ -99,15 +111,14 @@ namespace aspect
                   partial_strain_rates[j] += volume_fractions[i] * partial_strain_rates_composition[j];
               }
           }
-        else if (viscosity_averaging_scheme == isostress)
+
+        // Final step for Voigt-Reuss-Hill averaging is to divide
+        // the sum of the viscosities and partial strain rates by two.
+        if (viscosity_averaging_scheme == voigt_reuss_hill)
           {
-            viscosity = compute_isostress_viscosity (pressure,
-                                                     temperature,
-                                                     volume_fractions,
-                                                     strain_rate,
-                                                     partial_strain_rates,
-                                                     phase_function_values,
-                                                     n_phases_per_composition);
+            viscosity /= 2.;
+            for (unsigned int j=0; j < 5; ++j)
+              partial_strain_rates[j] /= 2.;
           }
 
         return viscosity;
@@ -193,9 +204,9 @@ namespace aspect
         unsigned int stress_iteration = 0;
         while (std::abs(strain_rate_residual) > strain_rate_residual_threshold
                && stress_iteration < stress_max_iteration_number)
-        {
+          {
 
-          std::pair<double, double> creep_edot_and_deriv = std::make_pair(0., 0.);
+            std::pair<double, double> creep_edot_and_deriv = std::make_pair(0., 0.);
             for (unsigned int composition=0; composition < number_of_compositions; ++composition)
               {
                 creep_edot_and_deriv = (creep_edot_and_deriv
@@ -253,8 +264,8 @@ namespace aspect
         // dictated by make_strain_rate_additional_outputs_names
         std::fill(partial_strain_rates.begin(), partial_strain_rates.end(), 0);
         for (unsigned int composition=0; composition < number_of_compositions; ++composition)
-        {
-          if (use_diffusion_creep)
+          {
+            if (use_diffusion_creep)
               {
                 const std::pair<double, double> diff_edot_and_deriv = diffusion_creep->compute_strain_rate_and_derivative(creep_stress, pressure, temperature, diffusion_creep_parameters[composition]);
                 partial_strain_rates[0] = volume_fractions[composition] * diff_edot_and_deriv.first;
@@ -282,8 +293,8 @@ namespace aspect
 
         partial_strain_rates[4] = total_stress/(2.*max_viscosity);
 
-                                  // Now we return the viscosity using the total stress
-                                  return total_stress/(2.*edot_ii);
+        // Now we return the viscosity using the total stress
+        return total_stress/(2.*edot_ii);
       }
 
 
@@ -500,11 +511,11 @@ namespace aspect
       CompositeViscoPlastic<dim>::declare_parameters (ParameterHandler &prm)
       {
         prm.declare_entry ("Viscosity averaging scheme", "isostrain",
-                           Patterns::Selection("isostrain|isostress|unspecified"),
+                           Patterns::Selection("isostrain|isostress|Voigt-Reuss-Hill|unspecified"),
                            "When more than one compositional field is present at a point "
                            "with different viscosities, we need to come up with an average "
                            "viscosity at that point.  Select either isostrain "
-                           "(the default option) or isostress.");
+                           "(the default option), isostress or Voigt-Reuss-Hill.");
 
         prm.declare_entry ("Include diffusion creep", "true",
                            Patterns::Bool (),
@@ -579,6 +590,8 @@ namespace aspect
           viscosity_averaging_scheme = isostrain;
         else if (prm.get ("Viscosity averaging scheme") == "isostress")
           viscosity_averaging_scheme = isostress;
+        else if (prm.get ("Viscosity averaging scheme") == "Voigt-Reuss-Hill")
+          viscosity_averaging_scheme = voigt_reuss_hill;
         else
           {
             AssertThrow(false, ExcMessage("Not a valid viscosity averaging scheme"));
