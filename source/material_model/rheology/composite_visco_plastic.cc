@@ -96,20 +96,34 @@ namespace aspect
         // Isostrain averaging or the second step toward VRH averaging
         if (viscosity_averaging_scheme == isostrain || viscosity_averaging_scheme == voigt_reuss_hill)
           {
-            for (unsigned int i=0; i < number_of_compositions; ++i)
+            double total_volume_fraction = 1.;
+            for (unsigned int composition=0; composition < number_of_compositions; ++composition)
               {
-                std::vector<double> partial_strain_rates_composition(5, 0.);
-                viscosity += (volume_fractions[i]
-                              * compute_composition_viscosity (pressure,
-                                                               temperature,
-                                                               i,
-                                                               strain_rate,
-                                                               partial_strain_rates_composition,
-                                                               phase_function_values,
-                                                               n_phases_per_composition));
-                for (unsigned int j=0; j < 5; ++j)
-                  partial_strain_rates[j] += volume_fractions[i] * partial_strain_rates_composition[j];
+                // Only include the contribution to the viscosity
+                // from a given composition if the volume fraction exceeds
+                // a certain (small) fraction.
+                if (volume_fractions[composition] > 1.e-5)
+                  {
+                    std::vector<double> partial_strain_rates_composition(5, 0.);
+                    viscosity += (volume_fractions[composition]
+                                  * compute_composition_viscosity (pressure,
+                                                                   temperature,
+                                                                   composition,
+                                                                   strain_rate,
+                                                                   partial_strain_rates_composition,
+                                                                   phase_function_values,
+                                                                   n_phases_per_composition));
+                    for (unsigned int j=0; j < 5; ++j)
+                      partial_strain_rates[j] += volume_fractions[composition] * partial_strain_rates_composition[j];
+                  }
+                else
+                  {
+                    total_volume_fraction -= volume_fractions[composition];
+                  }
               }
+            viscosity /= total_volume_fraction;
+            for (unsigned int j=0; j < 5; ++j)
+              partial_strain_rates[j] /= total_volume_fraction;
           }
 
         // Final step for Voigt-Reuss-Hill averaging is to divide
@@ -205,21 +219,34 @@ namespace aspect
         while (std::abs(strain_rate_residual) > strain_rate_residual_threshold
                && stress_iteration < stress_max_iteration_number)
           {
-
+            double total_volume_fraction = 1.;
             std::pair<double, double> creep_edot_and_deriv = std::make_pair(0., 0.);
             for (unsigned int composition=0; composition < number_of_compositions; ++composition)
               {
-                creep_edot_and_deriv = (creep_edot_and_deriv
-                                        + volume_fractions[composition]
-                                        * compute_strain_rate_and_derivative (creep_stress,
-                                                                              pressure,
-                                                                              temperature,
-                                                                              composition,
-                                                                              diffusion_creep_parameters[composition],
-                                                                              dislocation_creep_parameters[composition],
-                                                                              peierls_creep_parameters[composition],
-                                                                              drucker_prager_parameters));
+                // Only include the contribution to the viscosity
+                // from a given composition if the volume fraction exceeds
+                // a certain (small) fraction.
+                if (volume_fractions[composition] > 1.e-5)
+                  {
+                    creep_edot_and_deriv = (creep_edot_and_deriv
+                                            + volume_fractions[composition]
+                                            * compute_strain_rate_and_derivative (creep_stress,
+                                                                                  pressure,
+                                                                                  temperature,
+                                                                                  composition,
+                                                                                  diffusion_creep_parameters[composition],
+                                                                                  dislocation_creep_parameters[composition],
+                                                                                  peierls_creep_parameters[composition],
+                                                                                  drucker_prager_parameters));
+                  }
+                else
+                  {
+                    total_volume_fraction -= volume_fractions[composition];
+                  }
               }
+
+            creep_edot_and_deriv = std::make_pair(creep_edot_and_deriv.first/total_volume_fraction,
+                                                  creep_edot_and_deriv.second/total_volume_fraction);
 
             const double strain_rate = creep_stress/(2.*max_viscosity) + (max_viscosity/(max_viscosity - min_viscosity))*creep_edot_and_deriv.first;
             strain_rate_deriv = 1./(2.*max_viscosity) + (max_viscosity/(max_viscosity - min_viscosity))*creep_edot_and_deriv.second;
@@ -262,34 +289,47 @@ namespace aspect
 
         // The components of partial_strain_rates must be provided in the order
         // dictated by make_strain_rate_additional_outputs_names
+        double total_volume_fraction = 1.;
         std::fill(partial_strain_rates.begin(), partial_strain_rates.end(), 0);
         for (unsigned int composition=0; composition < number_of_compositions; ++composition)
           {
-            if (use_diffusion_creep)
+            // Only include the contribution to the viscosity
+            // from a given composition if the volume fraction exceeds
+            // a certain (small) fraction.
+            if (volume_fractions[composition] > 1.e-5)
               {
-                const std::pair<double, double> diff_edot_and_deriv = diffusion_creep->compute_strain_rate_and_derivative(creep_stress, pressure, temperature, diffusion_creep_parameters[composition]);
-                partial_strain_rates[0] = volume_fractions[composition] * diff_edot_and_deriv.first;
-              }
+                if (use_diffusion_creep)
+                  {
+                    const std::pair<double, double> diff_edot_and_deriv = diffusion_creep->compute_strain_rate_and_derivative(creep_stress, pressure, temperature, diffusion_creep_parameters[composition]);
+                    partial_strain_rates[0] = volume_fractions[composition] * diff_edot_and_deriv.first;
+                  }
 
-            if (use_dislocation_creep)
+                if (use_dislocation_creep)
+                  {
+                    const std::pair<double, double> disl_edot_and_deriv = dislocation_creep->compute_strain_rate_and_derivative(creep_stress, pressure, temperature, dislocation_creep_parameters[composition]);
+                    partial_strain_rates[1] = volume_fractions[composition] * disl_edot_and_deriv.first;
+                  }
+
+                if (use_peierls_creep)
+                  {
+                    const std::pair<double, double> prls_edot_and_deriv = peierls_creep->compute_strain_rate_and_derivative(creep_stress, pressure, temperature, peierls_creep_parameters[composition]);
+                    partial_strain_rates[2] = volume_fractions[composition] * prls_edot_and_deriv.first;
+                  }
+
+                if (use_drucker_prager)
+                  {
+                    const std::pair<double, double> drpr_edot_and_deriv = drucker_prager->compute_strain_rate_and_derivative(creep_stress, pressure, composition, drucker_prager_parameters);
+                    partial_strain_rates[3] = volume_fractions[composition] * drpr_edot_and_deriv.first;
+                  }
+              }
+            else
               {
-                const std::pair<double, double> disl_edot_and_deriv = dislocation_creep->compute_strain_rate_and_derivative(creep_stress, pressure, temperature, dislocation_creep_parameters[composition]);
-                partial_strain_rates[1] = volume_fractions[composition] * disl_edot_and_deriv.first;
+                total_volume_fraction -= volume_fractions[composition];
               }
-
-            if (use_peierls_creep)
-              {
-                const std::pair<double, double> prls_edot_and_deriv = peierls_creep->compute_strain_rate_and_derivative(creep_stress, pressure, temperature, peierls_creep_parameters[composition]);
-                partial_strain_rates[2] = volume_fractions[composition] * prls_edot_and_deriv.first;
-              }
-
-            if (use_drucker_prager)
-              {
-                const std::pair<double, double> drpr_edot_and_deriv = drucker_prager->compute_strain_rate_and_derivative(creep_stress, pressure, composition, drucker_prager_parameters);
-                partial_strain_rates[3] = volume_fractions[composition] * drpr_edot_and_deriv.first;
-              }
-
           }
+
+        for (unsigned int j=0; j < 4; ++j)
+          partial_strain_rates[j] /= total_volume_fraction;
 
         partial_strain_rates[4] = total_stress/(2.*max_viscosity);
 
