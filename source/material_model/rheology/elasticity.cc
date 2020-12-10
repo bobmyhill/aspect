@@ -254,6 +254,51 @@ namespace aspect
       }
 
 
+      template <int dim>
+      std::vector<SymmetricTensor<2,dim>>
+      Elasticity<dim>::compute_effective_strain_rates(const MaterialModel::MaterialModelInputs<dim> &in,
+                                                      const std::vector<double> &average_elastic_shear_moduli) const
+      {
+        // Get old (previous time step) velocity gradients
+        std::vector<Point<dim> > quadrature_positions(in.n_evaluation_points());
+        for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
+          quadrature_positions[i] = this->get_mapping().transform_real_to_unit_cell(in.current_cell, in.position[i]);
+
+        // FEValues requires a quadrature and we provide the default quadrature
+        // as we only need to evaluate the solution and gradients.
+        FEValues<dim> fe_values (this->get_mapping(),
+                                 this->get_fe(),
+                                 Quadrature<dim>(quadrature_positions),
+                                 update_gradients);
+
+        fe_values.reinit (in.current_cell);
+        std::vector<Tensor<2,dim> > old_velocity_gradients (quadrature_positions.size(), Tensor<2,dim>());
+        fe_values[this->introspection().extractors.velocities].get_function_gradients (this->get_old_solution(),
+                                                                                       old_velocity_gradients);
+
+        std::vector<SymmetricTensor<2,dim>> strain_rates(in.n_evaluation_points());
+        const double dte = elastic_timestep();
+
+        for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
+          {
+            // Get old stresses from compositional fields
+            SymmetricTensor<2,dim> stress_old;
+            for (unsigned int j=0; j < SymmetricTensor<2,dim>::n_independent_components; ++j)
+              stress_old[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)] = in.composition[i][j];
+
+            // Calculate the rotated stresses
+            // Rotation (vorticity) tensor (equation 25 in Moresi et al., 2003, J. Comp. Phys.)
+            const Tensor<2,dim> rotation = 0.5 * ( old_velocity_gradients[i] - transpose(old_velocity_gradients[i]) );
+
+
+            // Calculate the effective strain rate
+            strain_rates[i] = ( deviator(in.strain_rate[i]) +
+                              ( ( 0.5 / calculate_elastic_viscosity(average_elastic_shear_moduli[i]) ) *
+                               (stress_old + dte * ( symmetrize(rotation * Tensor<2,dim>(stress_old) ) - symmetrize(Tensor<2,dim>(stress_old) * rotation) ) ) ) );
+
+          }
+        return strain_rates;
+      }
 
       template <int dim>
       void
@@ -263,22 +308,8 @@ namespace aspect
       {
         if (in.current_cell.state() == IteratorState::valid && this->get_timestep_number() > 0 && in.requests_property(MaterialProperties::reaction_terms))
           {
-            // Get old (previous time step) velocity gradients
-            std::vector<Point<dim> > quadrature_positions(in.n_evaluation_points());
-            for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
-              quadrature_positions[i] = this->get_mapping().transform_real_to_unit_cell(in.current_cell, in.position[i]);
-
-            // FEValues requires a quadrature and we provide the default quadrature
-            // as we only need to evaluate the solution and gradients.
-            FEValues<dim> fe_values (this->get_mapping(),
-                                     this->get_fe(),
-                                     Quadrature<dim>(quadrature_positions),
-                                     update_gradients);
-
-            fe_values.reinit (in.current_cell);
-            std::vector<Tensor<2,dim> > old_velocity_gradients (quadrature_positions.size(), Tensor<2,dim>());
-            fe_values[this->introspection().extractors.velocities].get_function_gradients (this->get_old_solution(),
-                                                                                           old_velocity_gradients);
+            // If effective_strain_rates is called anywhere else, it would probably be better to store and add as an input variable.
+            std::vector<SymmetricTensor<2,dim>> edot_eff = compute_effective_strain_rates(in, average_elastic_shear_moduli);
 
             const double dte = elastic_timestep();
             const double dt = this->get_timestep();
@@ -290,10 +321,6 @@ namespace aspect
                 for (unsigned int j=0; j < SymmetricTensor<2,dim>::n_independent_components; ++j)
                   stress_old[SymmetricTensor<2,dim>::unrolled_to_component_indices(j)] = in.composition[i][j];
 
-                // Calculate the rotated stresses
-                // Rotation (vorticity) tensor (equation 25 in Moresi et al., 2003, J. Comp. Phys.)
-                const Tensor<2,dim> rotation = 0.5 * ( old_velocity_gradients[i] - transpose(old_velocity_gradients[i]) );
-
                 // Average viscoelastic viscosity
                 const double average_viscoelastic_viscosity = out.viscosities[i];
 
@@ -301,9 +328,8 @@ namespace aspect
                 // properties (viscoelastic viscosity, shear modulus), elastic time step size, strain rate,
                 // vorticity and prior (inherited) viscoelastic stresses (see equation 29 in Moresi et al.,
                 // 2003, J. Comp. Phys.)
-                SymmetricTensor<2,dim> stress_new = ( 2. * average_viscoelastic_viscosity * deviator(in.strain_rate[i]) ) +
-                                                    ( ( average_viscoelastic_viscosity / calculate_elastic_viscosity(average_elastic_shear_moduli[i]) ) *
-                                                      (stress_old + dte * ( symmetrize(rotation * Tensor<2,dim>(stress_old) ) - symmetrize(Tensor<2,dim>(stress_old) * rotation) ) ) );
+                SymmetricTensor<2,dim> stress_new = 2. * average_viscoelastic_viscosity * edot_eff[i];
+
                 // Stress averaging scheme to account for difference between fixed elastic time step
                 // and numerical time step (see equation 32 in Moresi et al., 2003, J. Comp. Phys.)
                 if (use_fixed_elastic_time_step == true && use_stress_averaging == true)

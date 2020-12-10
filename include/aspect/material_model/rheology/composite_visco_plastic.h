@@ -28,6 +28,7 @@
 #include <aspect/material_model/rheology/dislocation_creep.h>
 #include <aspect/material_model/rheology/peierls_creep.h>
 #include <aspect/material_model/rheology/drucker_prager.h>
+#include <aspect/material_model/rheology/elasticity.h>
 #include <aspect/simulator_access.h>
 
 namespace aspect
@@ -153,6 +154,7 @@ namespace aspect
           bool use_dislocation_creep;
           bool use_peierls_creep;
           bool use_drucker_prager;
+          bool use_elasticity;
 
           /**
            * Pointers to objects for computing deformation mechanism
@@ -162,6 +164,7 @@ namespace aspect
           std::unique_ptr<Rheology::DislocationCreep<dim>> dislocation_creep;
           std::unique_ptr<Rheology::PeierlsCreep<dim>> peierls_creep;
           std::unique_ptr<Rheology::DruckerPrager<dim>> drucker_prager;
+          std::unique_ptr<Rheology::Elasticity<dim>> elasticity;
 
           DruckerPragerParameters drucker_prager_parameters;
 

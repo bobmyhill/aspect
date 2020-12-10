@@ -103,6 +103,11 @@ namespace aspect
                                  const std::vector<double> &average_elastic_shear_moduli,
                                  MaterialModel::MaterialModelOutputs<dim> &out) const;
 
+
+          std::vector<SymmetricTensor<2,dim>>
+          compute_effective_strain_rates(const MaterialModel::MaterialModelInputs<dim> &in,
+                                         const std::vector<double> &average_elastic_shear_moduli) const;
+
           /**
            * Return the values of the elastic shear moduli for each composition used in the
            * rheology model.

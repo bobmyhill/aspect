@@ -81,6 +81,15 @@ namespace aspect
         double viscosity = 0.;
         partial_strain_rates.resize(5, 0.);
 
+        // Compute the effective shear modulus if elasticity is enabled
+        double average_shear_modulus = 0.;
+        if (use_elasticity)
+        {
+          average_shear_modulus = MaterialUtilities::average_value(volume_fractions,
+                                                                   elasticity->get_elastic_shear_moduli(),
+                                                                   MaterialUtilities::arithmetic);
+        }
+
         // Isostress averaging or the first step toward VRH averaging
         if (viscosity_averaging_scheme == isostress || viscosity_averaging_scheme == voigt_reuss_hill)
           {
@@ -573,6 +582,9 @@ namespace aspect
                            Patterns::Bool (),
                            "Whether to include Drucker-Prager plasticity in the rheological formulation.");
 
+        prm.declare_entry ("Include elasticity", "true",
+                           Patterns::Bool (),
+                           "Whether to include elasticity in the rheological formulation.");
 
         // Diffusion creep parameters
         Rheology::DiffusionCreep<dim>::declare_parameters(prm);
@@ -580,11 +592,14 @@ namespace aspect
         // Dislocation creep parameters
         Rheology::DislocationCreep<dim>::declare_parameters(prm);
 
-        // Dislocation creep parameters
+        // Peierls creep parameters
         Rheology::PeierlsCreep<dim>::declare_parameters(prm);
 
         // Drucker Prager parameters
         Rheology::DruckerPrager<dim>::declare_parameters(prm);
+
+        // Elasticity parameters
+        Rheology::Elasticity<dim>::declare_parameters(prm);
 
         // Some of the parameters below are shared with the subordinate
         // rheology models (diffusion, dislocation, ...),
@@ -688,7 +703,16 @@ namespace aspect
                         ExcMessage("If Drucker-Prager plasticity is included in the rheological formulation, you must use a viscous damper with a positive viscosity."));
           }
 
-        AssertThrow(use_diffusion_creep == true || use_dislocation_creep == true || use_peierls_creep == true || use_drucker_prager == true,
+        // Elasticity parameters
+        use_elasticity = prm.get_bool ("Include elasticity");
+        if (use_elasticity)
+          {
+            elasticity = std_cxx14::make_unique<Rheology::Elasticity<dim>>();
+            elasticity->initialize_simulator (this->get_simulator());
+            elasticity->parse_parameters(prm);
+          }
+
+        AssertThrow(use_diffusion_creep == true || use_dislocation_creep == true || use_peierls_creep == true || use_drucker_prager == true || use_elasticity == true,
                     ExcMessage("You need to include at least one deformation mechanism."));
 
       }
