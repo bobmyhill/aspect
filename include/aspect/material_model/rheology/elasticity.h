@@ -93,20 +93,20 @@ namespace aspect
 
           /**
            * Given the stress of the previous time step in the material model inputs @p in,
-           * the elastic shear moduli @p average_elastic_shear_moduli a each point,
+           * the effective strain rate @p effective_strain_rates at each point,
            * and the (viscous) viscosities given in the material model outputs object @p out,
            * compute an update to the elastic stresses and use it to fill the reaction terms
            * material model output property.
            */
           void
           fill_reaction_outputs (const MaterialModel::MaterialModelInputs<dim> &in,
-                                 const std::vector<double> &average_elastic_shear_moduli,
+                                 const std::vector<SymmetricTensor<2,dim>> &effective_strain_rates,
                                  MaterialModel::MaterialModelOutputs<dim> &out) const;
 
 
-          std::vector<SymmetricTensor<2,dim>>
-          compute_effective_strain_rates(const MaterialModel::MaterialModelInputs<dim> &in,
-                                         const std::vector<double> &average_elastic_shear_moduli) const;
+          std::vector<SymmetricTensor<2,dim> >
+          strain_rates_from_stored_stress(const MaterialModel::MaterialModelInputs<dim> &in,
+                                          const std::vector<double> &average_elastic_shear_moduli) const;
 
           /**
            * Return the values of the elastic shear moduli for each composition used in the
@@ -121,6 +121,14 @@ namespace aspect
            */
           double
           calculate_elastic_viscosity (const double shear_modulus) const;
+
+          /**
+           * Compute the strain rate and first stress derivative
+           * as a function of stress based on the damped elastic flow law.
+           */
+          std::pair<double, double>
+          compute_strain_rate_and_derivative(const double creep_stress,
+                                             const double shear_modulus) const;
 
           /**
            * Given the (viscous or visco-plastic) viscosity and the shear modulus, compute the viscoelastic
@@ -145,12 +153,14 @@ namespace aspect
           double
           elastic_timestep () const;
 
-        private:
+
           /**
            * Viscosity of a damper used to stabilize elasticity.
            * A value of 0 Pas is equivalent to not using a damper.
            */
           double elastic_damper_viscosity;
+
+        private:
 
           /**
            * Vector for field elastic shear moduli, read from parameter file.

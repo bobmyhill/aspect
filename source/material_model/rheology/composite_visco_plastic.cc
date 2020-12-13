@@ -56,6 +56,7 @@ namespace aspect
       //    names.emplace_back("edot_dislocation");
       //    names.emplace_back("edot_peierls");
       //    names.emplace_back("edot_drucker_prager");
+      //    names.emplace_back("edot_elasticity");
       //    names.emplace_back("edot_limiter");
       //    return names;
       //  }
@@ -67,39 +68,106 @@ namespace aspect
       {}
 
 
+      template <int dim>
+      void
+      CompositeViscoPlastic<dim>::fill_outputs(const MaterialModel::MaterialModelInputs<dim> &in,
+                                               const std::vector<std::vector<double>> &volume_fractions,
+                                               MaterialModel::MaterialModelOutputs<dim> &out) const
+      {
+        std::vector<double> average_shear_moduli(in.n_evaluation_points(), 0.);
+        const double scale = max_viscosity/(max_viscosity - min_viscosity);
+        std::vector<double> partial_strain_rates;
+
+        if (use_elasticity)
+          {
+            // Compute the effective shear modulus if elasticity is enabled
+            for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
+              {
+                average_shear_moduli[i] = MaterialUtilities::average_value(volume_fractions[i],
+                                                                           elasticity->get_elastic_shear_moduli(),
+                                                                           MaterialUtilities::arithmetic);
+              }
+
+            // If elasticity is enabled, the effective strain rate must be modified to
+            // account for the stored elastic strain from the previous timestep.
+            const std::vector<SymmetricTensor<2,dim>> strain_rates_from_stored_stress = elasticity->strain_rates_from_stored_stress(in, average_shear_moduli);
+
+            for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
+              {
+                // Rescale the effective strain rate to account for the viscosity limiters
+                const SymmetricTensor<2,dim> strain_rate = in.strain_rate[i] + scale * strain_rates_from_stored_stress[i];
+
+                // Compute the effective creep viscosity
+                const double eta_effcreep = compute_creep_viscosity (in.pressure[i],
+                                                                     in.temperature[i],
+                                                                     volume_fractions,
+                                                                     average_shear_moduli[i],
+                                                                     strain_rate,
+                                                                     partial_strain_rates,
+                                                                     phase_function_values,
+                                                                     n_phases_per_composition);
+                out.viscosities[i] = 1./(1./max_viscosity + 1./(eta_lim + eta_effcreep));
+
+                // force and reaction will go into elastic_force_outputs and fill_reaction_outputs
+                force = - 2. * eta_effcreep / ((eta_lim + eta_effcreep)/max_viscosity + 1.) * strain_rates_from_stored_stress[i];
+                tau_creep = 2. * eta_effcreep * strain_rate / (scale + eta_effcreep/max_viscosity);
+                reaction = (tau_creep * (1. - elasticity->elastic_damper_viscosity/elasticity->calculate_elastic_viscosity(average_shear_moduli[i]))
+                            + 2. * elasticity->elastic_damper_viscosity * strain_rates_from_stored_stress[i]);
+
+                //elasticity->fill_elastic_force_outputs(in, average_shear_moduli, out);
+                //elasticity->fill_reaction_outputs(in, average_shear_moduli, out);
+              }
+            // Fill the elastic additional outputs
+            if (ElasticAdditionalOutputs<dim> *elastic_out = out.template get_additional_output<ElasticAdditionalOutputs<dim> >())
+              {
+                elastic_out->elastic_shear_moduli = average_shear_moduli;
+              }
+          }
+        else
+          {
+            // If elasticity is not enabled, the viscosities can be calculated
+            // directly from the total strain rate.
+            for (unsigned int i=0; i < in.n_evaluation_points(); ++i)
+              {
+                // Compute the effective creep viscosity
+                const double eta_effcreep = compute_creep_viscosity(in.pressure[i],
+                                                                    in.temperature[i],
+                                                                    volume_fractions,
+                                                                    average_shear_moduli[i],
+                                                                    in.strain_rate[i],
+                                                                    partial_strain_rates,
+                                                                    phase_function_values,
+                                                                    n_phases_per_composition);
+                out.viscosities[i] = 1./(1./max_viscosity + 1./(eta_lim + eta_effcreep));
+              }
+          }
+      }
 
       template <int dim>
       double
-      CompositeViscoPlastic<dim>::compute_viscosity (const double pressure,
-                                                     const double temperature,
-                                                     const std::vector<double> &volume_fractions,
-                                                     const SymmetricTensor<2,dim> &strain_rate,
-                                                     std::vector<double> &partial_strain_rates,
-                                                     const std::vector<double> &phase_function_values,
-                                                     const std::vector<unsigned int> &n_phases_per_composition) const
+      CompositeViscoPlastic<dim>::compute_creep_viscosity (const double pressure,
+                                                           const double temperature,
+                                                           const std::vector<double> &volume_fractions,
+                                                           const double average_shear_modulus,
+                                                           const SymmetricTensor<2,dim> &strain_rate,
+                                                           std::vector<double> &partial_strain_rates,
+                                                           const std::vector<double> &phase_function_values,
+                                                           const std::vector<unsigned int> &n_phases_per_composition) const
       {
         double viscosity = 0.;
-        partial_strain_rates.resize(5, 0.);
-
-        // Compute the effective shear modulus if elasticity is enabled
-        double average_shear_modulus = 0.;
-        if (use_elasticity)
-        {
-          average_shear_modulus = MaterialUtilities::average_value(volume_fractions,
-                                                                   elasticity->get_elastic_shear_moduli(),
-                                                                   MaterialUtilities::arithmetic);
-        }
+        partial_strain_rates.resize(6, 0.);
 
         // Isostress averaging or the first step toward VRH averaging
         if (viscosity_averaging_scheme == isostress || viscosity_averaging_scheme == voigt_reuss_hill)
           {
-            viscosity += compute_isostress_viscosity (pressure,
-                                                      temperature,
-                                                      volume_fractions,
-                                                      strain_rate,
-                                                      partial_strain_rates,
-                                                      phase_function_values,
-                                                      n_phases_per_composition);
+            viscosity += compute_isostress_creep_viscosity (pressure,
+                                                            temperature,
+                                                            volume_fractions,
+                                                            average_shear_modulus,
+                                                            strain_rate,
+                                                            partial_strain_rates,
+                                                            phase_function_values,
+                                                            n_phases_per_composition);
           }
 
         // Isostrain averaging or the second step toward VRH averaging
@@ -113,16 +181,17 @@ namespace aspect
                 // a certain (small) fraction.
                 if (volume_fractions[composition] > 1.e-5)
                   {
-                    std::vector<double> partial_strain_rates_composition(5, 0.);
+                    std::vector<double> partial_strain_rates_composition(6, 0.);
                     viscosity += (volume_fractions[composition]
-                                  * compute_composition_viscosity (pressure,
-                                                                   temperature,
-                                                                   composition,
-                                                                   strain_rate,
-                                                                   partial_strain_rates_composition,
-                                                                   phase_function_values,
-                                                                   n_phases_per_composition));
-                    for (unsigned int j=0; j < 5; ++j)
+                                  * compute_composition_creep_viscosity (pressure,
+                                                                         temperature,
+                                                                         composition,
+                                                                         average_shear_modulus,
+                                                                         strain_rate,
+                                                                         partial_strain_rates_composition,
+                                                                         phase_function_values,
+                                                                         n_phases_per_composition));
+                    for (unsigned int j=0; j < 6; ++j)
                       partial_strain_rates[j] += volume_fractions[composition] * partial_strain_rates_composition[j];
                   }
                 else
@@ -131,7 +200,7 @@ namespace aspect
                   }
               }
             viscosity /= total_volume_fraction;
-            for (unsigned int j=0; j < 5; ++j)
+            for (unsigned int j=0; j < 6; ++j)
               partial_strain_rates[j] /= total_volume_fraction;
           }
 
@@ -140,7 +209,7 @@ namespace aspect
         if (viscosity_averaging_scheme == voigt_reuss_hill)
           {
             viscosity /= 2.;
-            for (unsigned int j=0; j < 5; ++j)
+            for (unsigned int j=0; j < 6; ++j)
               partial_strain_rates[j] /= 2.;
           }
 
@@ -151,13 +220,14 @@ namespace aspect
 
       template <int dim>
       double
-      CompositeViscoPlastic<dim>::compute_isostress_viscosity (const double pressure,
-                                                               const double temperature,
-                                                               const std::vector<double> &volume_fractions,
-                                                               const SymmetricTensor<2,dim> &strain_rate,
-                                                               std::vector<double> &partial_strain_rates,
-                                                               const std::vector<double> &phase_function_values,
-                                                               const std::vector<unsigned int> &n_phases_per_composition) const
+      CompositeViscoPlastic<dim>::compute_isostress_creep_viscosity (const double pressure,
+                                                                     const double temperature,
+                                                                     const std::vector<double> &volume_fractions,
+                                                                     const double average_shear_modulus,
+                                                                     const SymmetricTensor<2,dim> &strain_rate,
+                                                                     std::vector<double> &partial_strain_rates,
+                                                                     const std::vector<double> &phase_function_values,
+                                                                     const std::vector<unsigned int> &n_phases_per_composition) const
       {
         // If strain rate is zero (like during the first time step) set it to some very small number
         // to prevent a division-by-zero, and a floating point exception.
@@ -239,14 +309,15 @@ namespace aspect
                   {
                     creep_edot_and_deriv = (creep_edot_and_deriv
                                             + volume_fractions[composition]
-                                            * compute_strain_rate_and_derivative (creep_stress,
-                                                                                  pressure,
-                                                                                  temperature,
-                                                                                  composition,
-                                                                                  diffusion_creep_parameters[composition],
-                                                                                  dislocation_creep_parameters[composition],
-                                                                                  peierls_creep_parameters[composition],
-                                                                                  drucker_prager_parameters));
+                                            * compute_creep_strain_rate_and_derivative (creep_stress,
+                                                                                        pressure,
+                                                                                        temperature,
+                                                                                        composition,
+                                                                                        diffusion_creep_parameters[composition],
+                                                                                        dislocation_creep_parameters[composition],
+                                                                                        peierls_creep_parameters[composition],
+                                                                                        drucker_prager_parameters,
+                                                                                        average_shear_modulus));
                   }
                 else
                   {
@@ -310,25 +381,31 @@ namespace aspect
                 if (use_diffusion_creep)
                   {
                     const std::pair<double, double> diff_edot_and_deriv = diffusion_creep->compute_strain_rate_and_derivative(creep_stress, pressure, temperature, diffusion_creep_parameters[composition]);
-                    partial_strain_rates[0] = volume_fractions[composition] * diff_edot_and_deriv.first;
+                    partial_strain_rates[0] += volume_fractions[composition] * diff_edot_and_deriv.first;
                   }
 
                 if (use_dislocation_creep)
                   {
                     const std::pair<double, double> disl_edot_and_deriv = dislocation_creep->compute_strain_rate_and_derivative(creep_stress, pressure, temperature, dislocation_creep_parameters[composition]);
-                    partial_strain_rates[1] = volume_fractions[composition] * disl_edot_and_deriv.first;
+                    partial_strain_rates[1] += volume_fractions[composition] * disl_edot_and_deriv.first;
                   }
 
                 if (use_peierls_creep)
                   {
                     const std::pair<double, double> prls_edot_and_deriv = peierls_creep->compute_strain_rate_and_derivative(creep_stress, pressure, temperature, peierls_creep_parameters[composition]);
-                    partial_strain_rates[2] = volume_fractions[composition] * prls_edot_and_deriv.first;
+                    partial_strain_rates[2] += volume_fractions[composition] * prls_edot_and_deriv.first;
                   }
 
                 if (use_drucker_prager)
                   {
                     const std::pair<double, double> drpr_edot_and_deriv = drucker_prager->compute_strain_rate_and_derivative(creep_stress, pressure, composition, drucker_prager_parameters);
-                    partial_strain_rates[3] = volume_fractions[composition] * drpr_edot_and_deriv.first;
+                    partial_strain_rates[3] += volume_fractions[composition] * drpr_edot_and_deriv.first;
+                  }
+
+                if (use_elasticity)
+                  {
+                    const std::pair<double, double> el_edot_and_deriv = elasticity->compute_strain_rate_and_derivative(creep_stress, average_shear_modulus);
+                    partial_strain_rates[4] += volume_fractions[composition] * el_edot_and_deriv.first;
                   }
               }
             else
@@ -340,23 +417,28 @@ namespace aspect
         for (unsigned int j=0; j < 4; ++j)
           partial_strain_rates[j] /= total_volume_fraction;
 
-        partial_strain_rates[4] = total_stress/(2.*max_viscosity);
+        partial_strain_rates[5] = total_stress/(2.*max_viscosity);
 
         // Now we return the viscosity using the total stress
-        return total_stress/(2.*edot_ii);
+        // return total_stress/(2.*edot_ii);
+
+        // Now we return the creep viscosity using the creep stress
+        // and creep strain
+        return creep_stress/(2.*creep_edot_and_deriv.first);
       }
 
 
 
       template <int dim>
       double
-      CompositeViscoPlastic<dim>::compute_composition_viscosity (const double pressure,
-                                                                 const double temperature,
-                                                                 const unsigned int composition,
-                                                                 const SymmetricTensor<2,dim> &strain_rate,
-                                                                 std::vector<double> &partial_strain_rates,
-                                                                 const std::vector<double> &phase_function_values,
-                                                                 const std::vector<unsigned int> &n_phases_per_composition) const
+      CompositeViscoPlastic<dim>::compute_composition_creep_viscosity (const double pressure,
+                                                                       const double temperature,
+                                                                       const unsigned int composition,
+                                                                       const double average_shear_modulus,
+                                                                       const SymmetricTensor<2,dim> &strain_rate,
+                                                                       std::vector<double> &partial_strain_rates,
+                                                                       const std::vector<double> &phase_function_values,
+                                                                       const std::vector<unsigned int> &n_phases_per_composition) const
       {
         // If strain rate is zero (like during the first time step) set it to some very small number
         // to prevent a division-by-zero, and a floating point exception.
@@ -419,14 +501,15 @@ namespace aspect
                && stress_iteration < stress_max_iteration_number)
           {
 
-            const std::pair<double, double> creep_edot_and_deriv = compute_strain_rate_and_derivative (creep_stress,
+            const std::pair<double, double> creep_edot_and_deriv = compute_creep_strain_rate_and_derivative (creep_stress,
                                                                    pressure,
                                                                    temperature,
                                                                    composition,
                                                                    diffusion_creep_parameters,
                                                                    dislocation_creep_parameters,
                                                                    peierls_creep_parameters,
-                                                                   drucker_prager_parameters);
+                                                                   drucker_prager_parameters,
+                                                                   average_shear_modulus);
 
             const double strain_rate = creep_stress/(2.*max_viscosity) + (max_viscosity/(max_viscosity - min_viscosity))*creep_edot_and_deriv.first;
             strain_rate_deriv = 1./(2.*max_viscosity) + (max_viscosity/(max_viscosity - min_viscosity))*creep_edot_and_deriv.second;
@@ -493,10 +576,21 @@ namespace aspect
             partial_strain_rates[3] = drpr_edot_and_deriv.first;
           }
 
-        partial_strain_rates[4] = total_stress/(2.*max_viscosity);
+        if (use_elasticity)
+          {
+            const std::pair<double, double> el_edot_and_deriv = elasticity->compute_strain_rate_and_derivative(creep_stress, average_shear_modulus);
+            partial_strain_rates[4] += el_edot_and_deriv.first;
+          }
+
+
+        partial_strain_rates[5] = total_stress/(2.*max_viscosity);
 
         // Now we return the viscosity using the total stress
-        return total_stress/(2.*edot_ii);
+        // return total_stress/(2.*edot_ii);
+
+        // Now we return the creep viscosity using the creep stress
+        // and creep strain
+        return creep_stress/(2.*creep_edot_and_deriv.first);
       }
 
 
@@ -527,14 +621,15 @@ namespace aspect
 
       template <int dim>
       std::pair<double, double>
-      CompositeViscoPlastic<dim>::compute_strain_rate_and_derivative (const double creep_stress,
-                                                                      const double pressure,
-                                                                      const double temperature,
-                                                                      const unsigned int composition,
-                                                                      const DiffusionCreepParameters diffusion_creep_parameters,
-                                                                      const DislocationCreepParameters dislocation_creep_parameters,
-                                                                      const PeierlsCreepParameters peierls_creep_parameters,
-                                                                      const DruckerPragerParameters drucker_prager_parameters) const
+      CompositeViscoPlastic<dim>::compute_creep_strain_rate_and_derivative (const double creep_stress,
+                                                                            const double pressure,
+                                                                            const double temperature,
+                                                                            const unsigned int composition,
+                                                                            const DiffusionCreepParameters diffusion_creep_parameters,
+                                                                            const DislocationCreepParameters dislocation_creep_parameters,
+                                                                            const PeierlsCreepParameters peierls_creep_parameters,
+                                                                            const DruckerPragerParameters drucker_prager_parameters,
+                                                                            const double average_shear_modulus) const
       {
         std::pair<double, double> creep_edot_and_deriv = std::make_pair(0., 0.);
 
@@ -549,6 +644,9 @@ namespace aspect
 
         if (use_drucker_prager)
           creep_edot_and_deriv = creep_edot_and_deriv + drucker_prager->compute_strain_rate_and_derivative(creep_stress, pressure, composition, drucker_prager_parameters);
+
+        if (use_elasticity)
+          creep_edot_and_deriv = creep_edot_and_deriv + elasticity->compute_strain_rate_and_derivative(creep_stress, average_shear_modulus);
 
         return creep_edot_and_deriv;
       }
@@ -716,6 +814,15 @@ namespace aspect
                     ExcMessage("You need to include at least one deformation mechanism."));
 
       }
+
+      template <int dim>
+      void
+      CompositeViscoPlastic<dim>::create_additional_named_outputs (MaterialModel::MaterialModelOutputs<dim> &out) const
+      {
+        if (use_elasticity)
+          elasticity->create_elastic_outputs(out);
+      }
+
     }
   }
 }

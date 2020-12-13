@@ -255,9 +255,9 @@ namespace aspect
 
 
       template <int dim>
-      std::vector<SymmetricTensor<2,dim>>
-      Elasticity<dim>::compute_effective_strain_rates(const MaterialModel::MaterialModelInputs<dim> &in,
-                                                      const std::vector<double> &average_elastic_shear_moduli) const
+      std::vector<SymmetricTensor<2,dim> >
+      Elasticity<dim>::strain_rates_from_stored_stress(const MaterialModel::MaterialModelInputs<dim> &in,
+                                                       const std::vector<double> &average_elastic_shear_moduli) const
       {
         // Get old (previous time step) velocity gradients
         std::vector<Point<dim> > quadrature_positions(in.n_evaluation_points());
@@ -291,10 +291,9 @@ namespace aspect
             const Tensor<2,dim> rotation = 0.5 * ( old_velocity_gradients[i] - transpose(old_velocity_gradients[i]) );
 
 
-            // Calculate the effective strain rate
-            strain_rates[i] = ( deviator(in.strain_rate[i]) +
-                              ( ( 0.5 / calculate_elastic_viscosity(average_elastic_shear_moduli[i]) ) *
-                               (stress_old + dte * ( symmetrize(rotation * Tensor<2,dim>(stress_old) ) - symmetrize(Tensor<2,dim>(stress_old) * rotation) ) ) ) );
+            // Calculate strain rates from stored stress
+            strain_rates[i] = ( ( 0.5 / calculate_elastic_viscosity(average_elastic_shear_moduli[i]) ) *
+                                (stress_old + dte * ( symmetrize(rotation * Tensor<2,dim>(stress_old) ) - symmetrize(Tensor<2,dim>(stress_old) * rotation) ) ) );
 
           }
         return strain_rates;
@@ -303,13 +302,11 @@ namespace aspect
       template <int dim>
       void
       Elasticity<dim>::fill_reaction_outputs (const MaterialModel::MaterialModelInputs<dim> &in,
-                                              const std::vector<double> &average_elastic_shear_moduli,
+                                              const std::vector<SymmetricTensor<2,dim>> &effective_strain_rates,
                                               MaterialModel::MaterialModelOutputs<dim> &out) const
       {
         if (in.current_cell.state() == IteratorState::valid && this->get_timestep_number() > 0 && in.requests_property(MaterialProperties::reaction_terms))
           {
-            // If effective_strain_rates is called anywhere else, it would probably be better to store and add as an input variable.
-            std::vector<SymmetricTensor<2,dim>> edot_eff = compute_effective_strain_rates(in, average_elastic_shear_moduli);
 
             const double dte = elastic_timestep();
             const double dt = this->get_timestep();
@@ -328,7 +325,7 @@ namespace aspect
                 // properties (viscoelastic viscosity, shear modulus), elastic time step size, strain rate,
                 // vorticity and prior (inherited) viscoelastic stresses (see equation 29 in Moresi et al.,
                 // 2003, J. Comp. Phys.)
-                SymmetricTensor<2,dim> stress_new = 2. * average_viscoelastic_viscosity * edot_eff[i];
+                SymmetricTensor<2,dim> stress_new = 2. * average_viscoelastic_viscosity * deviator(effective_strain_rates[i]);
 
                 // Stress averaging scheme to account for difference between fixed elastic time step
                 // and numerical time step (see equation 32 in Moresi et al., 2003, J. Comp. Phys.)
@@ -387,6 +384,18 @@ namespace aspect
       calculate_elastic_viscosity (const double shear_modulus) const
       {
         return shear_modulus*elastic_timestep() + elastic_damper_viscosity;
+      }
+
+
+
+      template <int dim>
+      std::pair<double, double>
+      Elasticity<dim>::
+      compute_strain_rate_and_derivative(const double creep_stress,
+                                         const double shear_modulus) const
+      {
+        const double elastic_viscosity = calculate_elastic_viscosity(shear_modulus);
+        return std::make_pair(creep_stress/(2.*elastic_viscosity), 1./(2.*elastic_viscosity));
       }
 
 
