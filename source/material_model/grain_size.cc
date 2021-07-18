@@ -182,7 +182,6 @@ namespace aspect
     convert_log_grain_size (std::vector<double> &composition) const
     {
       // get grain size and limit it to a global minimum
-      const unsigned int grain_size_index = this->introspection().compositional_index_for_name("grain_size");
       double grain_size = composition[grain_size_index];
       grain_size = std::max(std::exp(-grain_size),min_grain_size);
 
@@ -309,7 +308,7 @@ namespace aspect
       // TODO: recrystallize first, and then do grain size growth/reduction for grains that crossed the transition
       // in dependence of the distance they have moved
       double phase_grain_size_reduction = 0.0;
-      if (this->introspection().name_for_compositional_index(field_index) == "grain_size"
+      if (field_index == grain_size_index
           &&
           this->get_timestep_number() > 0)
         {
@@ -338,7 +337,7 @@ namespace aspect
       const SymmetricTensor<2,dim> shear_strain_rate = strain_rate - 1./dim * trace(strain_rate) * unit_symmetric_tensor<dim>();
       const double second_strain_rate_invariant = std::sqrt(std::abs(second_invariant(shear_strain_rate)));
 
-      const double grain_size = composition[this->introspection().compositional_index_for_name("grain_size")];
+      const double grain_size = composition[grain_size_index];
 
       // Currently this will never be called without adiabatic_conditions initialized, but just in case
       const double adiabatic_pressure = this->get_adiabatic_conditions().is_initialized()
@@ -768,10 +767,7 @@ namespace aspect
           if (advect_log_grainsize)
             convert_log_grain_size(composition);
           else
-            {
-              const unsigned int grain_size_index = this->introspection().compositional_index_for_name("grain_size");
-              composition[grain_size_index] = std::max(min_grain_size,composition[grain_size_index]);
-            }
+            composition[grain_size_index] = std::max(min_grain_size,composition[grain_size_index]);
 
           // set up an integer that tells us which phase transition has been crossed inside of the cell
           int crossed_transition(-1);
@@ -856,7 +852,7 @@ namespace aspect
           if (in.requests_property(MaterialProperties::reaction_terms))
             for (unsigned int c=0; c<composition.size(); ++c)
               {
-                if (this->introspection().name_for_compositional_index(c) == "grain_size")
+                if (c == grain_size_index)
                   {
                     out.reaction_terms[i][c] = grain_size_change(in.temperature[i], pressure, composition,
                                                                  in.strain_rate[i], in.velocity[i], in.position[i], c, crossed_transition);
@@ -1225,10 +1221,12 @@ namespace aspect
     void
     GrainSize<dim>::parse_parameters (ParameterHandler &prm)
     {
-      AssertThrow (this->introspection().compositional_name_exists("grain_size"),
-                   ExcMessage("The 'grain size' material model only works if a compositional "
-                              "field with name 'grain_size' is present. Please use another material "
+      AssertThrow (this->introspection().get_field_type_indices().grain_size.size() == 1,
+                   ExcMessage("The 'grain size' material model only works if a single compositional "
+                              "field with type 'grain_size' is present. Please use another material "
                               "model or add such a field."));
+
+      grain_size_index = this->introspection().get_field_type_indices().grain_size[0];
 
       prm.enter_subsection("Material model");
       {
@@ -1483,7 +1481,7 @@ namespace aspect
                                    "size evolution in terms of the strain rate, "
                                    "temperature, phase transitions, and the creep regime. "
                                    "This material model only works if a compositional field "
-                                   "named 'grain_size' is present. "
+                                   "of type 'grain_size' is present. "
                                    "In the diffusion creep regime, the viscosity depends "
                                    "on this grain size field. "
                                    "We use the grain size evolution laws described in Behn "

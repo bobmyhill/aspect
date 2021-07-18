@@ -84,6 +84,7 @@ end
 subsection Compositional fields
   set Number of fields = 1
   set Names of fields   = grain_size
+  set Types of fields   = grain_size
 end
 
 subsection Material model

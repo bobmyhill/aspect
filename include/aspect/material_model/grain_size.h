@@ -185,6 +185,8 @@ namespace aspect
         std::vector<double> reciprocal_required_strain;
         std::vector<double> recrystallized_grain_size;
 
+        unsigned int grain_size_index;
+
         /**
          * Parameters controlling the dynamic grain recrystallization.
          * (following paleowattmeter as described in Austin, N. J., & Evans, B.
