@@ -342,7 +342,7 @@ namespace aspect
 #define INSTANTIATE(dim) \
   template class Interface<dim>; \
   template class Manager<dim>; \
-
+   
     ASPECT_INSTANTIATE(INSTANTIATE)
 
 #undef INSTANTIATE
