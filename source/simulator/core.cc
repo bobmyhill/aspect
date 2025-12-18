@@ -1384,7 +1384,6 @@ namespace aspect
     // addition, we may be computing constraints from boundary values for the
     // velocity that are different between time steps. these are then put
     // into current_constraints in start_timestep().
-    signals.pre_compute_no_normal_flux_constraints(triangulation);
     {
       // do the interpolation for zero velocity
       for (const auto p : boundary_velocity_manager.get_zero_boundary_velocity_indicators())
@@ -1394,15 +1393,6 @@ namespace aspect
                                                   Functions::ZeroFunction<dim>(introspection.n_components),
                                                   constraints,
                                                   introspection.component_masks.velocities);
-
-
-      // do the same for no-normal-flux boundaries
-      VectorTools::compute_no_normal_flux_constraints (dof_handler,
-                                                       /* first_vector_component= */
-                                                       introspection.component_indices.velocities[0],
-                                                       boundary_velocity_manager.get_tangential_boundary_velocity_indicators(),
-                                                       constraints,
-                                                       *mapping);
     }
 
 
@@ -1438,6 +1428,19 @@ namespace aspect
                                                   constraints,
                                                   boundary_velocity_manager.get_component_mask(boundary_id));
       }
+
+    signals.pre_compute_no_normal_flux_constraints(triangulation);
+    {
+      // do the same for no-normal-flux boundaries
+      VectorTools::compute_no_normal_flux_constraints (dof_handler,
+                                                       /* first_vector_component= */
+                                                       introspection.component_indices.velocities[0],
+                                                       boundary_velocity_manager.get_tangential_boundary_velocity_indicators(),
+                                                       constraints,
+                                                       *mapping);
+    }
+
+    signals.post_compute_no_normal_flux_constraints(triangulation);
   }
 
 
