@@ -491,6 +491,18 @@ namespace aspect
           }
       }
 
+    compute_current_constraints ();
+    {
+      computing_timer.enter_subsection("Setup matrices");
+
+      rebuild_sparsity_and_matrices = false;
+      setup_system_matrix (introspection.index_sets.system_partitioning);
+      setup_system_preconditioner (introspection.index_sets.system_partitioning);
+      rebuild_stokes_matrix = rebuild_stokes_preconditioner = true;
+
+      computing_timer.leave_subsection("Setup matrices");
+    }
+
     // Re-compute the pressure scaling factor for the Stokes assembly
     pressure_scaling = compute_pressure_scaling_factor();
     assemble_stokes_system ();
